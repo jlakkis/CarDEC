@@ -10,13 +10,13 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="CarDEC",
-    version="1.0.0.1",
+    version="1.0.1",
     author="Justin Lakkis",
     author_email="jlakks@gmail.com",
     description="A deep learning method for joint batch correction, denoting, and clustering of single-cell rna-seq data.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://drive.google.com/drive/folders/19VVOoq4XSdDFRZDou-VbTMyV2Na9z53O?usp=sharing",
+    url="https://github.com/jlakkis/CarDEC",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

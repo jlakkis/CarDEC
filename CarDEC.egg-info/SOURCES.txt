@@ -1,5 +1,8 @@
+.DS_Store
+LICENSE.rtf
 README.md
 setup.py
+CarDEC/.DS_Store
 CarDEC/CarDEC_API.py
 CarDEC/CarDEC_MainModel.py
 CarDEC/CarDEC_SAE.py
