@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: CarDEC
-Version: 1.0.0.2
+Version: 1.0.0.3
 Summary: A deep learning method for joint batch correction, denoting, and clustering of single-cell rna-seq data.
 Home-page: https://github.com/jlakkis/CarDEC
 Author: Justin Lakkis

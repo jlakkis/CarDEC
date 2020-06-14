@@ -117,17 +117,3 @@ def ZINBloss(count, output, eps = 1e-10):
 def _nan2inf(x):
     return tf.where(tf.math.is_nan(x), tf.zeros_like(x) + np.inf, x)
 
-
-# In[4]:
-
-
-p = [[0.1,0.3,0.6], [0.1,0.3,0.6]]
-q = [[0.2,0.28, 0.52], [0.1,0.3,0.6]]
-tf.reduce_mean(KLD(p,q))
-
-
-# In[ ]:
-
-
-
-
