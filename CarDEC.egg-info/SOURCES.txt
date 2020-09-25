@@ -16,8 +16,10 @@ CarDEC.egg-info/SOURCES.txt
 CarDEC.egg-info/dependency_links.txt
 CarDEC.egg-info/requires.txt
 CarDEC.egg-info/top_level.txt
+CarDEC/.ipynb_checkpoints/CarDEC Macaque Basic Example-checkpoint.ipynb
 cardec.egg-info/PKG-INFO
 cardec.egg-info/SOURCES.txt
 cardec.egg-info/dependency_links.txt
 cardec.egg-info/requires.txt
 cardec.egg-info/top_level.txt
+dist/.DS_Store
