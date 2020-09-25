@@ -1,36 +1,19 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
 
-
-# In[ ]:
-
-
 class ClusteringLayer(Layer):
-    """
-    Clustering layer converts input sample (feature) to soft label, i.e. a vector that represents the probability of the
-    sample belonging to each cluster. The probability is calculated with student's t-distribution.
-
-    # Example
-    ```
-        model.add(ClusteringLayer(n_clusters=10))
-    ```
-    # Arguments
-        n_clusters: number of clusters.
-        centroids: list of Numpy array with shape `(n_clusters, n_features)` witch represents the initial cluster centers.
-        alpha: parameter in Student's t-distribution. Default to 1.0.
-    # Input shape
-        2D tensor with shape: `(n_samples, n_features)`.
-    # Output shape
-        2D tensor with shape: `(n_samples, n_clusters)`.
-    """
-
     def __init__(self, centroids = None, n_clusters = None, n_features = None, alpha=1.0, **kwargs):
+        """ The clustering layer predicts the a cell's class membership probability for each cell.
+
+
+        Arguments:
+        ------------------------------------------------------------------
+        - centroids: `tf.Tensor`, Initial cluster ceontroids after pretraining the model.
+        - n_clusters: `int`, Number of clusters.
+        - n_features: `int`, The number of features of the bottleneck embedding space that the centroids live in.
+        - alpha: parameter in Student's t-distribution. Default to 1.0.
+        """
+        
         super(ClusteringLayer, self).__init__(**kwargs)
         self.alpha = alpha
         self.initial_centroids = centroids
@@ -44,6 +27,14 @@ class ClusteringLayer(Layer):
         assert self.n_features is not None
 
     def build(self, input_shape):
+        """ This class method builds the layer fully once it receives an input tensor.
+        
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - input_shape: `list`, A list specifying the shape of the input tensor.
+        """
+        
         assert len(input_shape) == 2
         
         self.centroids = self.add_weight(name = 'clusters', shape = (self.n_clusters, self.n_features), initializer = 'glorot_uniform')
@@ -54,12 +45,14 @@ class ClusteringLayer(Layer):
         self.built = True
 
     def call(self, x, **kwargs):
-        """ student t-distribution, as same as used in t-SNE algorithm.
-                 q_ij = 1/(1+dist(x_i, u_j)^2), then normalize it.
-        Arguments:
-            inputs: the variable containing data, shape=(n_samples, n_features)
-        Return:
-            q: student's t-distribution, or soft labels for each sample. shape=(n_samples, n_clusters)
+        """ Forward pass of the clustering layer,
+        
+        
+        ***Inputs***:
+            - inputs: `tf.Tensor`, the embedding tensor of shape = (n_obs, n_var)
+        
+        ***Returns***:
+            - q: `tf.Tensor`, student's t-distribution, or soft labels for each sample of shape = (n_obs, n_clusters)
         """
 
         q = 1.0 / (1.0 + (tf.reduce_sum(tf.square(tf.expand_dims(x, axis = 1) - self.centroids), axis = 2) / self.alpha))
@@ -69,6 +62,17 @@ class ClusteringLayer(Layer):
         return q
 
     def compute_output_shape(self, input_shape):
+        """ This method infers the output shape from the input shape.
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - input_shape: `list`, A list specifying the shape of the input tensor.
+        
+        Returns:
+        ------------------------------------------------------------------
+        - output_shape: `list`, A tuple specifying the shape of the output for the minibatch (n_obs, n_clusters)
+        """
+        
         assert input_shape and len(input_shape) == 2
         return input_shape[0], self.n_clusters
 

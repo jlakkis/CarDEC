@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
 from .CarDEC_SAE import SAE
 from .CarDEC_utils import build_dir, find_resolution
 from .CarDEC_layers import ClusteringLayer
@@ -29,15 +23,7 @@ import os
 from copy import deepcopy
 from time import time
 
-
-# In[ ]:
-
-
 set_floatx('float32')
-
-
-# In[ ]:
-
 
 class CarDEC_Model(Model):
     def __init__(self, adata, dims, LVG_dims = None, tol = 0.005, n_clusters = None, random_seed = 201809, 
@@ -45,6 +31,33 @@ class CarDEC_Model(Model):
                  patience_LR = 3, patience_ES = 9, act = 'relu', actincenter = "tanh", ae_lr = 1e-04, clust_weight = 1., 
                  load_encoder_weights = True, set_centroids = True, weights_dir = "CarDEC Weights"):
         super(CarDEC_Model, self).__init__()
+        """ This class creates the TensorFlow CarDEC model architecture.
+
+
+        Arguments:
+        ------------------------------------------------------------------
+        - adata: `anndata.AnnData`, the annotated data matrix of shape (n_obs, n_vars). Rows correspond to cells and columns to genes.
+        - dims: `list`, the number of output features for each layer of the HVG encoder. The length of the list determines the number of layers.
+        - LVG_dims: `list`, the number of output features for each layer of the LVG encoder. The length of the list determines the number of layers.
+        - tol: `float`, stop criterion, clustering procedure will be stopped when the difference ratio between the current iteration and last iteration larger than tol.
+        - n_clusters: `int`, The number of clusters into which cells will be grouped.
+        - random_seed: `int`, The seed used for random weight intialization.
+        - louvain_seed: `int`, The seed used for louvain clustering intialization.
+        - n_neighbors: `int`, The number of neighbors used for building the graph needed for louvain clustering.
+        - pretrain_epochs: `int`, The maximum number of epochs for pretraining the HVG autoencoder. In practice, early stopping criteria should stop training much earlier.
+        - batch_size: `int`, The batch size used for pretraining the HVG autoencoder.
+        - decay_factor: `float`, The multiplicative factor by which to decay the learning rate when validation loss is not decreasing.
+        - patience_LR: `int`, the number of epochs which the validation loss is allowed to increase before learning rate is decayed when pretraining the autoencoder.
+        - patience_ES: `int`, the number of epochs which the validation loss is allowed to increase before training is halted when pretraining the autoencoder.
+        - act: `str`, The activation function used for the intermediate layers of CarDEC, other than the bottleneck layer.
+        - actincenter: `str`, The activation function used for the bottleneck layer of CarDEC.
+        - ae_lr: `float`, The learning rate for pretraining the HVG autoencoder.
+        - clust_weight: `float`, a number between 0 and 2 qhich balances the clustering and reconstruction losses.
+        - load_encoder_weights: `bool`, If True, the API will try to load the weights for the HVG encoder from the weight directory.
+        - set_centroids: `bool`, If True, intialize the centroids by running Louvain's algorithm.
+        - weights_dir: `str`, the path in which to save the weights of the CarDEC model.
+        ------------------------------------------------------------------
+        """
         
         assert clust_weight <= 2. and clust_weight>=0.
         
@@ -73,7 +86,7 @@ class CarDEC_Model(Model):
         
         # build the autoencoder
         self.sae = SAE(dims = self.dims, act = self.activation, actincenter = self.actincenter, 
-                       random_seed = random_seed, init="glorot_uniform", optimizer = Adam(), 
+                       random_seed = random_seed, splitseed = self.splitseed, init="glorot_uniform", optimizer = Adam(), 
                        weights_dir = weights_dir)
         
         build_dir(self.weights_dir)
@@ -166,11 +179,19 @@ class CarDEC_Model(Model):
         self.construct()
         
     def construct(self, summarize = True):
-        x = tf.zeros(shape = (1, self.dims[0]), dtype=float)
+        """ This class method fully initalizes the TensorFlow model.
+
+
+        Arguments:
+        ------------------------------------------------------------------
+        - summary: `bool`, If True, then print a summary of the model architecure.
+        """
+        
+        x = [tf.zeros(shape = (1, self.dims[0]), dtype=float), None]
         if self.LVG_dims is not None:
-            x = [x, tf.zeros(shape = (1, self.LVG_dims[0]), dtype=float)]
+            x[1] = tf.zeros(shape = (1, self.LVG_dims[0]), dtype=float)
             
-        out = self(x)
+        out = self(*x)
         
         if summarize:
             print("\n-----------------------CarDEC Architecture-----------------------\n")
@@ -189,56 +210,76 @@ class CarDEC_Model(Model):
                 print("\n----------------LVG Base Decoder Sub-Architecture----------------\n")
                 self.decoderLVG.summary()
 
-    def call(self, x, clust_only = False):
+    def call(self, hvg, lvg, denoise = True):
+        """ This is the forward pass of the model.
         
-        if clust_only:
-            c = self.encoder(x)
+        ***Inputs***
+            - hvg: `tf.Tensor`, an input tensor of shape (n_obs, n_HVG).
+            - lvg: `tf.Tensor`, (Optional) an input tensor of shape (n_obs, n_LVG).
+            - denoise: `bool`, (Optional) If True, return denoised expression values for each cell.
             
-            cluster_output = self.clustering_layer(c)
-            
+        ***Outputs***
+            - denoised_output: `dict`, (Optional) Dictionary containing denoised tensors.
+            - cluster_output: `tf.Tensor`, a tensor of cell cluster membership probabilities of shape (n_obs, m).
+        """
+        
+        hvg = self.encoder(hvg)
+
+        cluster_output = self.clustering_layer(hvg)
+        
+        if not denoise:
             return cluster_output
-        
-        if self.LVG_dims is None:
-            c = self.encoder(x)
 
-            cluster_output = self.clustering_layer(c)
+        HVG_denoised_output = self.decoder(hvg)
+        denoised_output = {'HVG_denoised': HVG_denoised_output}
 
-            HVG_denoised_output = self.decoder(c)
-                            
-            denoised_output = {}
-            denoised_output['HVG_denoised'] = HVG_denoised_output
-
-            return denoised_output, cluster_output
-        
         if self.LVG_dims is not None:
-            c = x[0]
-            lvg = x[1]
-            
-            c = self.encoder(c)
-            
-            cluster_output = self.clustering_layer(c)
-            
             lvg = self.encoderLVG(lvg)
-            
-            z = concatenate([c, lvg], axis=1)
-            
-            HVG_denoised_output = self.decoder(c)
+            z = concatenate([hvg, lvg], axis=1)
+
             LVG_denoised_output = self.decoderLVG(z)
 
-            denoised_output = {}
-            
-            denoised_output['HVG_denoised'] = HVG_denoised_output
             denoised_output['LVG_denoised'] = LVG_denoised_output
-            
-            return denoised_output, cluster_output
+
+        return denoised_output, cluster_output
 
     @staticmethod
     def target_distribution(q):
+        """ Updates target distribution cluster assignment probabilities given CarDEC output.
+        
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - q: `tf.Tensor`, a tensor of shape (b, m) identifying the probability that each of b cells is in each of the m clusters. Obtained as output from CarDEC.
+        
+        Returns:
+        ------------------------------------------------------------------
+        - p: `tf.Tensor`, a tensor of shape (b, m) identifying the pseudo-label probability that each of b cells is in each of the m clusters.
+        """
+        
         weight = q ** 2 / np.sum(q, axis = 0)
         p = weight.T / np.sum(weight, axis = 1)
         return p.T
     
     def make_generators(self, adata, val_split, batch_size, p, splitseed, newseed):
+        """ This class method creates training and validation data generators for the current input data and pseudo labels.
+        
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - adata: `anndata.AnnData`, the annotated data matrix of shape (n_obs, n_vars). Rows correspond to cells and columns to genes.
+        - val_split: `float`, The fraction of cells to be reserved for validation during this step.
+        - batch_size: `int`, The batch size used for training the full model.
+        - p: `tf.Tensor`, a tensor of shape (b, m) identifying the pseudo-label probability that each of b cells is in each of the m clusters.
+        - splitseed: `int`, The seed used to split cells between training and validation. Should be consistent between iterations to ensure the same cells are always used for validation.
+        - newseed: `int`, The seed that is set after splitting cells between training and validation. Should be different every iteration so that stochastic operations other than splitting cells between training and validation vary between epochs.
+        
+        Returns:
+        ------------------------------------------------------------------
+        - train_dataset: `tf.data.Dataset`, Dataset that returns training examples.
+        - val_dataset: `tf.data.Dataset`, Dataset that returns validation examples.
+        """
+        
         n, num_features = adata.X.shape
         
         if self.LVG_dims is None:
@@ -275,20 +316,30 @@ class CarDEC_Model(Model):
         return train_dataset, val_dataset
         
     def train_loop(self, train_dataset):
-        # Training loop - using batches of batch_size
+        """ This class method runs the training loop.
         
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - train_dataset: `tf.data.Dataset`, Dataset that returns training examples.
+        
+        Returns:
+        ------------------------------------------------------------------
+        - epoch_loss_avg: `float`, The mean training loss for the iteration.
+
+        """        
         epoch_loss_avg = tf.keras.metrics.Mean()
         
         if self.LVG_dims is not None:
-            for x, target, LVG_target, batch_p in train_dataset:
-                loss_value, grads = grad(self, x, target, batch_p, total_loss = total_loss,
+            for inputs, target, LVG_target, batch_p in train_dataset:
+                loss_value, grads = grad(self, inputs, target, batch_p, total_loss = total_loss,
                                          LVG_target = LVG_target, aeloss_fun = MSEloss, 
                                          clust_weight = self.clust_weight)
                 self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
                 epoch_loss_avg(loss_value)
         else:
-            for x, target, batch_p in train_dataset:
-                loss_value, grads = grad(self, x, target, batch_p, total_loss = total_loss, 
+            for inputs, target, batch_p in train_dataset:
+                loss_value, grads = grad(self, [inputs, None], target, batch_p, total_loss = total_loss, 
                                          LVG_target = None, aeloss_fun = MSEloss, 
                                          clust_weight = self.clust_weight)
                 self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
@@ -297,21 +348,32 @@ class CarDEC_Model(Model):
         return epoch_loss_avg.result()
                 
     def validation_loop(self, val_dataset):
-        # Validation loop - using batches of batch_size
+        """ This class method runs the validation loop.
         
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - val_dataset: `tf.data.Dataset`, Dataset that returns validation examples.
+        
+        Returns:
+        ------------------------------------------------------------------
+        - epoch_loss_avg: `float`, The mean validation loss for the iteration (reconstruction + clustering loss)
+        - epoch_aeloss_avg_val: `float`, The mean validation reconstruction loss for the iteration
+
+        """               
         epoch_loss_avg_val = tf.keras.metrics.Mean()
         epoch_aeloss_avg_val = tf.keras.metrics.Mean()
             
         if self.LVG_dims is not None:
-            for x, target, LVG_target, batch_p in val_dataset:
-                denoised_output, cluster_output = self(x)
+            for inputs, target, LVG_target, batch_p in val_dataset:
+                denoised_output, cluster_output = self(*inputs)
                 loss_value, aeloss = total_loss(target, denoised_output, batch_p, cluster_output, 
                                LVG_target = LVG_target, aeloss_fun = MSEloss, clust_weight = self.clust_weight)
                 epoch_loss_avg_val(loss_value)
                 epoch_aeloss_avg_val(aeloss)
         else:
-            for x, target, batch_p in val_dataset:
-                denoised_output, cluster_output = self(x)
+            for inputs, target, batch_p in val_dataset:
+                denoised_output, cluster_output = self(*[inputs, None])
                 loss_value, aeloss = total_loss(target, denoised_output, batch_p, cluster_output, 
                                LVG_target = None, aeloss_fun = MSEloss, clust_weight= self.clust_weight)
                 epoch_loss_avg_val(loss_value)
@@ -319,12 +381,36 @@ class CarDEC_Model(Model):
                 
         return epoch_loss_avg_val.result(), epoch_aeloss_avg_val.result()
     
-    def package_output(self, adata, init_pred, preclust_denoised, preclust_emb, batch_size = 200):
+    def package_output(self, adata, init_pred, preclust_denoised, preclust_emb):
+        """ This class adds some quantities to the adata object.
+        
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - adata: `anndata.AnnData`, the annotated data matrix of shape (n_obs, n_vars). Rows correspond to cells and columns to genes.
+        - init_pred: `np.ndarray`, the array of initial cluster assignments for each cells, of shape (n_obs,).
+        - preclust_denoised: `np.ndarray`, This is the array of feature zscores denoised with the pretrained autoencoder of shape (n_obs, n_vars).
+        - preclust_emb: `np.ndarray`, This is the latent embedding from the pretrained autoencoder of shape (n_obs, n_embedding).
+        """        
+        
         adata.obsm['precluster denoised'] = preclust_denoised
         adata.obsm['precluster embedding'] = preclust_emb
         adata.obsm['initial assignments'] = init_pred
     
     def embed(self, adata, batch_size):
+        """ This class method can be used to compute the low-dimension embedding for HVG features. 
+        
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - adata: `anndata.AnnData`, The annotated data matrix of shape (n_obs, n_vars). Rows correspond to cells and columns to genes.
+        - batch_size: `int`, The batch size for filling the array of low dimension embeddings.
+        
+        Returns:
+        ------------------------------------------------------------------
+        - embedding: `np.ndarray`, Array of shape (n_obs, p_embedding) containing the HVG embedding for every cell in the dataset.
+        """
+        
         input_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'])
         input_ds = input_ds.batch(batch_size)
         
@@ -339,6 +425,19 @@ class CarDEC_Model(Model):
         return embedding
     
     def embed_LVG(self, adata, batch_size):
+        """ This class method can be used to compute the low-dimension embedding for LVG features. 
+        
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - adata: `anndata.AnnData`, The annotated data matrix of shape (n_obs, n_vars). Rows correspond to cells and columns to genes.
+        - batch_size: `int`, The batch size for filling the array of low dimension embeddings.
+        
+        Returns:
+        ------------------------------------------------------------------
+        - embedding: `np.ndarray`, Array of shape (n_obs, n_embedding) containing the LVG embedding for every cell in the dataset.
+        """
+        
         input_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'LVG'])
         input_ds = input_ds.batch(batch_size)
 
@@ -353,6 +452,15 @@ class CarDEC_Model(Model):
         return np.concatenate((adata.obsm['embedding'], LVG_embedded), axis = 1)
     
     def make_outputs(self, adata, batch_size, denoise = True):
+        """ This class method can be used to pack all relvant outputs into the adata object after training.
+        
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - adata: `anndata.AnnData`, The annotated data matrix of shape (n_obs, n_vars).
+        - batch_size: `int`, The batch size for filling the array of low dimension embeddings.
+        - denoise: `bool`, Whether to provide denoised expression values for all cells.
+        """
         
         if not denoise:
             input_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'])
@@ -361,7 +469,7 @@ class CarDEC_Model(Model):
             
             start = 0     
             for x in input_ds:
-                q_batch = self(x, clust_only = not denoise)
+                q_batch = self(x, None, False)
                 end = start + q_batch.shape[0]
                 adata.obsm["cluster memberships"][start:end] = q_batch.numpy()
             
@@ -382,9 +490,9 @@ class CarDEC_Model(Model):
             adata.layers["denoised"] = np.zeros(adata.shape, dtype = 'float32')
             
             start = 0     
-            for x in input_ds:
-                denoised_batch = {'HVG_denoised': self.decoder(x[0]), 'LVG_denoised': self.decoderLVG(x[1])}
-                q_batch = self.clustering_layer(x[0])
+            for input_ in input_ds:
+                denoised_batch = {'HVG_denoised': self.decoder(input_[0]), 'LVG_denoised': self.decoderLVG(input_[1])}
+                q_batch = self.clustering_layer(input_[0])
                 end = start + q_batch.shape[0]
                 
                 adata.obsm["cluster memberships"][start:end] = q_batch.numpy()
@@ -405,9 +513,9 @@ class CarDEC_Model(Model):
             
             start = 0
             
-            for x in input_ds:
-                denoised_batch = {'HVG_denoised': self.decoder(x)}
-                q_batch = self.clustering_layer(x)
+            for input_ in input_ds:
+                denoised_batch = {'HVG_denoised': self.decoder(input_)}
+                q_batch = self.clustering_layer(input_)
                 
                 end = start + q_batch.shape[0]
                 
@@ -417,8 +525,30 @@ class CarDEC_Model(Model):
                 start = end
                 
     def train(self, adata, batch_size = 64, val_split = 0.1, lr = 1e-04, decay_factor = 1/3,
-              iteration_patience_LR = 3, iteration_patience_ES = 6, epoch_patience_ES = 4, 
+              iteration_patience_LR = 3, iteration_patience_ES = 6, 
               maxiter = 1e3, epochs_fit = 1, optimizer = Adam(), printperiter = None, denoise = True):
+        """ This class method can be used to train the main CarDEC model
+        
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - adata: `anndata.AnnData`, The annotated data matrix of shape (n_obs, n_vars).
+        - batch_size: `int`, The batch size used for training the full model.
+        - val_split: `float`, The fraction of cells to be reserved for validation during this step.
+        - lr: `float`, The learning rate for training the full model.
+        - decay_factor: `float`, The multiplicative factor by which to decay the learning rate when validation loss is not decreasing.
+        - iteration_patience_LR: `int`, The number of iterations tolerated before decaying the learning rate during which the number of cells that change assignment is less than tol.
+        - iteration_patience_ES: `int`, The number of iterations tolerated before stopping training during which the number of cells that change assignment is less than tol.
+        - maxiter: `int`, The maximum number of iterations allowed to train the full model. In practice, the model will halt training long before hitting this limit.
+        - epochs_fit: `int`, The number of epochs during which to fine-tune weights, before updating the target distribution.
+        - optimizer: `tensorflow.python.keras.optimizer_v2`, An instance of a TensorFlow optimizer.
+        - printperiter: `int`, Optional integer argument. If specified, denoised values will be returned every printperiter epochs, so that the user can evaluate the progress of denoising as training continues.
+        - denoise: `bool`, If True, then denoised expression values are provided for all cells.
+        
+        Returns:
+        ------------------------------------------------------------------
+        - adata: `anndata.AnnData`, The updated annotated data matrix of shape (n_obs, n_vars). Rows correspond to cells and columns to genes. Depending on the arguments of the train call, some outputs will be added to adata.
+        """
         
         total_start = time()
         seedlist = list(1000*np.random.randn(int(maxiter)))
@@ -528,6 +658,19 @@ class CarDEC_Model(Model):
         return adata
     
     def reload_model(self, adata = None, batch_size = 64, denoise = True):
+        """ This class method can be used to load the model's saved weights and redo inference.
+        
+        
+        Arguments:
+        ------------------------------------------------------------------
+        - adata: `anndata.AnnData`, (Optional) The annotated data matrix of shape (n_obs, n_vars). Rows correspond to cells and columns to genes. If left as None, model weights will be reloaded but inference will not be made.
+        - batch_size: `int`, The batch size for filling the array of low dimension embeddings.
+        - denoise: `bool`, Whether to provide denoised expression values for all cells.
+        
+        Returns:
+        ------------------------------------------------------------------
+        - adata: `anndata.AnnData`, (Optional) The annotated data matrix of shape (n_obs, n_vars). If an adata object was provided as input, the adata object will be returned with inference outputs added.
+        """
         
         if os.path.isfile("./" + self.weights_dir + "/tuned_CarDECweights.index"):
             print("Weight index file detected, loading weights.")

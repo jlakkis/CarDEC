@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
 import numpy as np
 import os
 from scipy.sparse import issparse
@@ -12,12 +6,26 @@ import scanpy as sc
 from anndata import AnnData
 
 
-# In[ ]:
-
-
-def normalize_scanpy(adata, batch_key = None, n_high_var=1000, LVG = True, 
+def normalize_scanpy(adata, batch_key = None, n_high_var = 1000, LVG = True, 
                      normalize_samples = True, log_normalize = True, 
                      normalize_features = True):
+    """ This function preprocesses the raw count data.
+    
+    
+    Arguments:
+    ------------------------------------------------------------------
+    - adata: `anndata.AnnData`, the annotated data matrix of shape (n_obs, n_vars). Rows correspond to cells and columns to genes.
+    - batch_key: `str`, string specifying the name of the column in the observation dataframe which identifies the batch of each cell. If this is left as None, then all cells are assumed to be from one batch.
+    - n_high_var: `int`, integer specifying the number of genes to be idntified as highly variable. E.g. if n_high_var = 2000, then the 2000 genes with the highest variance are designated as highly variable.
+    - LVG: `bool`, Whether to retain and preprocess LVGs.
+    - normalize_samples: `bool`, If True, normalize expression of each gene in each cell by the sum of expression counts in that cell.
+    - log_normalize: `bool`, If True, log transform expression. I.e., compute log(expression + 1) for each gene, cell expression count.
+    - normalize_features: `bool`, If True, z-score normalize each gene's expression.
+    
+    Returns:
+    ------------------------------------------------------------------
+    - adata: `anndata.AnnData`, the annotated data matrix of shape (n_obs, n_vars). Contains preprocessed data.
+    """
     
     n, p = adata.shape
     sparsemode = issparse(adata.X)
@@ -113,10 +121,15 @@ def normalize_scanpy(adata, batch_key = None, n_high_var=1000, LVG = True,
     return adata
 
 
-# In[ ]:
-
-
 def build_dir(dir_path):
+    """ This function builds a directory if it does not exist.
+    
+    
+    Arguments:
+    ------------------------------------------------------------------
+    - dir_path: `str`, The directory to build. E.g. if dir_path = 'folder1/folder2/folder3', then this function will creates directory if folder1 if it does not already exist. Then it creates folder1/folder2 if folder2 does not exist in folder1. Then it creates folder1/folder2/folder3 if folder3 does not exist in folder2.
+    """
+    
     subdirs = [dir_path]
     substring = dir_path
 
@@ -136,19 +149,36 @@ def build_dir(dir_path):
             os.mkdir(dir_)
 
 
-# In[ ]:
-
-
 def convert_string_to_encoding(string, vector_key):
-    """A function to convert a string to a numeric encoding"""
+    """A function to convert a string to a numeric encoding.
+    
+    
+    Arguments:
+    ------------------------------------------------------------------
+    - string: `str`, The specific string to convert to a numeric encoding.
+    - vector_key: `np.ndarray`, Array of all possible values of string.
+    
+    Returns:
+    ------------------------------------------------------------------
+    - encoding: `int`, The integer encoding of string.
+    """
+    
     return np.argwhere(vector_key == string)[0][0]
 
 
-# In[ ]:
-
-
 def convert_vector_to_encoding(vector):
-    """A function to convert a vector of strings to a dense numeric encoding"""
+    """A function to convert a vector of strings to a dense numeric encoding.
+    
+    
+    Arguments:
+    ------------------------------------------------------------------
+    - vector: `array_like`, The vector of strings to encode.
+    
+    Returns:
+    ------------------------------------------------------------------
+    - vector_num: `list`, A list containing the dense numeric encoding.
+    """
+    
     vector_key = np.unique(vector)
     vector_strings = list(vector)
     vector_num = [convert_string_to_encoding(string, vector_key) for string in vector_strings]
@@ -156,10 +186,21 @@ def convert_vector_to_encoding(vector):
     return vector_num
 
 
-# In[ ]:
-
-
-def find_resolution(adata_, n_clusters, random): 
+def find_resolution(adata_, n_clusters, random):
+    """A function to find the louvain resolution tjat corresponds to a prespecified number of clusters, if it exists.
+    
+    
+    Arguments:
+    ------------------------------------------------------------------
+    - adata_: `anndata.AnnData`, the annotated data matrix of shape (n_obs, n_vars). Rows correspond to cells and columns to low dimension features.
+    - n_clusters: `int`, Number of clusters.
+    - random: `int`, The random seed.
+    
+    Returns:
+    ------------------------------------------------------------------
+    - resolution: `float`, The resolution that gives n_clusters after running louvain's clustering algorithm.
+    """
+    
     obtained_clusters = -1
     iteration = 0
     resolutions = [0., 1000.]
