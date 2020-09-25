@@ -46,7 +46,7 @@ A [tutorial jupyter notebook](https://drive.google.com/drive/folders/19VVOoq4XSd
     
 - Python >= 3.7
 - TensorFlow == 2.3.1
-- scikit-learn==0.22.2.post1
+- scikit-learn == 0.22.2.post1
 - scanpy == 1.5.1
 - louvain == 0.6.1
 - pandas == 1.0.1
