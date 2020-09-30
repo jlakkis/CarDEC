@@ -125,6 +125,7 @@ class CarDEC_API:
         ------------------------------------------------------------------
         - denoised: `pd.DataFrame`, (Optional) If denoise_list was specified, then this will be an array of denoised expression provided only for listed cells. If denoise_all was instead specified as True, then denoised expression for all cells will be added as a layer to adata.
         """
+
         if denoise_list is not None:
             denoise_all = False
             
@@ -209,9 +210,9 @@ class CarDEC_API:
         - act: `str`, A string specifying the activation function for intermediate layers of the count models.
         - random_seed: `int`, A seed used for weight initialization.
         - optimizer: `tensorflow.python.keras.optimizer_v2`, An instance of a TensorFlow optimizer.
+	- keep_dispersion: `bool`, If True, the gene, cell dispersions will be returned as well.
         - num_epochs: `int`, The maximum number of epochs allowed to train each count model. In practice, the model will halt
         training long before hitting this limit.
-        - keep_dispersion: `bool`, If True, the gene, cell dispersions will be returned as well.
         - batch_size_count: `int`, The batch size used for training the count models.
         - val_split: `float`, The fraction of cells to be reserved for validation during this step.
         - lr: `float`, The learning rate for training the count models.

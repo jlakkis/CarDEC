@@ -132,7 +132,7 @@ class SAE(Model):
 
         Arguments:
         ------------------------------------------------------------------
-        - summary: `bool`, If True, then print a summary of the model architecure.
+        - summarize: `bool`, If True, then print a summary of the model architecture.
         """
         
         x = tf.zeros(shape = (1, self.dims[0]), dtype=float)

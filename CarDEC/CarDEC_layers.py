@@ -4,8 +4,8 @@ from tensorflow.keras.layers import Layer
 class ClusteringLayer(Layer):
     def __init__(self, centroids = None, n_clusters = None, n_features = None, alpha=1.0, **kwargs):
         """ The clustering layer predicts the a cell's class membership probability for each cell.
-
-
+        
+        
         Arguments:
         ------------------------------------------------------------------
         - centroids: `tf.Tensor`, Initial cluster ceontroids after pretraining the model.
@@ -49,7 +49,7 @@ class ClusteringLayer(Layer):
         
         
         ***Inputs***:
-            - inputs: `tf.Tensor`, the embedding tensor of shape = (n_obs, n_var)
+            - x: `tf.Tensor`, the embedding tensor of shape = (n_obs, n_var)
         
         ***Returns***:
             - q: `tf.Tensor`, student's t-distribution, or soft labels for each sample of shape = (n_obs, n_clusters)
@@ -64,6 +64,7 @@ class ClusteringLayer(Layer):
     def compute_output_shape(self, input_shape):
         """ This method infers the output shape from the input shape.
         
+        
         Arguments:
         ------------------------------------------------------------------
         - input_shape: `list`, A list specifying the shape of the input tensor.
@@ -75,4 +76,3 @@ class ClusteringLayer(Layer):
         
         assert input_shape and len(input_shape) == 2
         return input_shape[0], self.n_clusters
-

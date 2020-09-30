@@ -184,7 +184,7 @@ class CarDEC_Model(Model):
 
         Arguments:
         ------------------------------------------------------------------
-        - summary: `bool`, If True, then print a summary of the model architecure.
+        - summarize: `bool`, If True, then print a summary of the model architecture.
         """
         
         x = [tf.zeros(shape = (1, self.dims[0]), dtype=float), None]
@@ -213,6 +213,7 @@ class CarDEC_Model(Model):
     def call(self, hvg, lvg, denoise = True):
         """ This is the forward pass of the model.
         
+
         ***Inputs***
             - hvg: `tf.Tensor`, an input tensor of shape (n_obs, n_HVG).
             - lvg: `tf.Tensor`, (Optional) an input tensor of shape (n_obs, n_LVG).
@@ -326,8 +327,8 @@ class CarDEC_Model(Model):
         Returns:
         ------------------------------------------------------------------
         - epoch_loss_avg: `float`, The mean training loss for the iteration.
+        """
 
-        """        
         epoch_loss_avg = tf.keras.metrics.Mean()
         
         if self.LVG_dims is not None:
@@ -359,8 +360,8 @@ class CarDEC_Model(Model):
         ------------------------------------------------------------------
         - epoch_loss_avg: `float`, The mean validation loss for the iteration (reconstruction + clustering loss)
         - epoch_aeloss_avg_val: `float`, The mean validation reconstruction loss for the iteration
+        """
 
-        """               
         epoch_loss_avg_val = tf.keras.metrics.Mean()
         epoch_aeloss_avg_val = tf.keras.metrics.Mean()
             

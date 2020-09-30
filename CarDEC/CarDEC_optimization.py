@@ -14,6 +14,7 @@ def grad_MainModel(model, input_, target, target_p, total_loss, LVG_target = Non
     - input_: `list`, A list containing the input HVG and (optionally) LVG expression tensors of the minibatch for the CarDEC model.
     - target: `tf.Tensor`, Tensor containing the reconstruction target of the minibatch for the HVGs.
     - target_p: `tf.Tensor`, Tensor containing cluster membership probability targets for the minibatch.
+    - total_loss: `function`, Function to compute the loss for the main CarDEC model for a minibatch.
     - LVG_target: `tf.Tensor` (Optional), Tensor containing the reconstruction target of the minibatch for the LVGs.
     - aeloss_fun: `function`, Function to compute reconstruction loss.
     - clust_weight: `float`, A float between 0 and 2 balancing clustering and reconstruction losses.
@@ -155,7 +156,6 @@ def ZINBloss(count, output, eps = 1e-10):
     - count: `tf.Tensor`, Tensor containing the network reconstruction target of the minibatch for the cells (the original counts).
     - output: `tf.Tensor`, Tensor containing the reconstructed target of the minibatch for the cells.
     - eps: `float`, A small number introduced for computational stability
-    - mean: `bool`, If True, average negative binomial loss over genes and cells
     
     Returns:
     ------------------------------------------------------------------
