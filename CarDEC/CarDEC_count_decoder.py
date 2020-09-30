@@ -86,7 +86,7 @@ class count_model(Model):
         
         ***Inputs***
             - x: `tf.Tensor`, an input tensor of shape (b, p)
-            - b: `tf.Tensor`, and input tensor of shape (b, ) containing the size factor for each cell
+            - s: `tf.Tensor`, and input tensor of shape (b, ) containing the size factor for each cell
             
         ***Outputs***
             - mean: `tf.Tensor`, A (b, p_gene) tensor of negative binomial means for each cell, gene.
