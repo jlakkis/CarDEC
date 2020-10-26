@@ -132,7 +132,7 @@ class CarDEC_Model(Model):
         else:
             print("\nInitializing cluster centroids using the louvain method.")
             
-            n_cells = adata0.shape[0]
+            n_cells = features.shape[0]
             
             if n_cells > 10**5:
                 subset = np.random.choice(range(n_cells), 10**5, replace = False)
