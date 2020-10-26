@@ -84,9 +84,10 @@ class count_model(Model):
     def call(self, x, s):
         """ This is the forward pass of the model.
         
+
         ***Inputs***
             - x: `tf.Tensor`, an input tensor of shape (b, p)
-            - b: `tf.Tensor`, and input tensor of shape (b, ) containing the size factor for each cell
+            - s: `tf.Tensor`, and input tensor of shape (b, ) containing the size factor for each cell
             
         ***Outputs***
             - mean: `tf.Tensor`, A (b, p_gene) tensor of negative binomial means for each cell, gene.
@@ -116,7 +117,7 @@ class count_model(Model):
         ------------------------------------------------------------------
         - n_features: `int`, the number of input features.
         - name: `str`, Model name (to distinguish HVG and LVG models).
-        - summary: `bool`, If True, then print a summary of the model architecure.
+        - summarize: `bool`, If True, then print a summary of the model architecture.
         """
         
         x = [tf.zeros(shape = (1, n_features), dtype='float32'), tf.ones(shape = (1,), dtype='float32')]

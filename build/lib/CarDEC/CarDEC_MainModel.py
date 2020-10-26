@@ -132,21 +132,28 @@ class CarDEC_Model(Model):
         else:
             print("\nInitializing cluster centroids using the louvain method.")
             
-            adata0 = AnnData(features)
+            n_cells = adata0.shape[0]
+            
+            if n_cells > 10**5:
+                subset = np.random.choice(range(n_cells), 10**5, replace = False)
+                adata0 = AnnData(features[subset])
+            else: 
+                adata0 = AnnData(features)
+
             sc.pp.neighbors(adata0, n_neighbors = self.n_neighbors, use_rep="X")
             self.resolution = find_resolution(adata0, n_clusters, louvain_seed)
             adata0 = sc.tl.louvain(adata0, resolution = self.resolution, random_state = louvain_seed, copy = True)
-            
+
             Y_pred_init = adata0.obs['louvain']
             self.init_pred = np.asarray(Y_pred_init, dtype=int)
-            
+
             features = pd.DataFrame(adata0.X, index = np.arange(0, adata0.shape[0]))
             Group = pd.Series(self.init_pred, index = np.arange(0, adata0.shape[0]), name="Group")
             Mergefeature = pd.concat([features, Group],axis=1)
-            
+
             self.init_centroid = np.asarray(Mergefeature.groupby("Group").mean())
             self.n_clusters = self.init_centroid.shape[0]
-            
+
             print("\n " + str(self.n_clusters) + " clusters detected. \n")
         
         self.encoder = self.sae.encoder
@@ -184,7 +191,7 @@ class CarDEC_Model(Model):
 
         Arguments:
         ------------------------------------------------------------------
-        - summary: `bool`, If True, then print a summary of the model architecure.
+        - summarize: `bool`, If True, then print a summary of the model architecture.
         """
         
         x = [tf.zeros(shape = (1, self.dims[0]), dtype=float), None]
@@ -213,6 +220,7 @@ class CarDEC_Model(Model):
     def call(self, hvg, lvg, denoise = True):
         """ This is the forward pass of the model.
         
+
         ***Inputs***
             - hvg: `tf.Tensor`, an input tensor of shape (n_obs, n_HVG).
             - lvg: `tf.Tensor`, (Optional) an input tensor of shape (n_obs, n_LVG).
@@ -326,8 +334,8 @@ class CarDEC_Model(Model):
         Returns:
         ------------------------------------------------------------------
         - epoch_loss_avg: `float`, The mean training loss for the iteration.
+        """
 
-        """        
         epoch_loss_avg = tf.keras.metrics.Mean()
         
         if self.LVG_dims is not None:
@@ -359,8 +367,8 @@ class CarDEC_Model(Model):
         ------------------------------------------------------------------
         - epoch_loss_avg: `float`, The mean validation loss for the iteration (reconstruction + clustering loss)
         - epoch_aeloss_avg_val: `float`, The mean validation reconstruction loss for the iteration
+        """
 
-        """               
         epoch_loss_avg_val = tf.keras.metrics.Mean()
         epoch_aeloss_avg_val = tf.keras.metrics.Mean()
             

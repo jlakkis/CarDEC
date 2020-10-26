@@ -10,7 +10,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="cardec",
-    version="1.0.1.3",
+    version="1.0.2.0",
     author="Justin Lakkis",
     author_email="jlakks@gmail.com",
     description="A deep learning method for joint batch correction, denoting, and clustering of single-cell rna-seq data.",
