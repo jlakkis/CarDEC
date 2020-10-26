@@ -19,5 +19,3 @@ cardec.egg-info/SOURCES.txt
 cardec.egg-info/dependency_links.txt
 cardec.egg-info/requires.txt
 cardec.egg-info/top_level.txt
-dist/cardec-1.0.1.3-py3-none-any.whl
-dist/cardec-1.0.1.3.tar.gz
