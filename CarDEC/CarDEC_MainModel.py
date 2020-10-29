@@ -134,8 +134,9 @@ class CarDEC_Model(Model):
             
             n_cells = features.shape[0]
             
-            if n_cells > 10**5:
-                subset = np.random.choice(range(n_cells), 10**5, replace = False)
+            if n_cells > 10**4:
+                print("subsample")
+                subset = np.random.choice(range(n_cells), 10**4, replace = False)
                 adata0 = AnnData(features[subset])
             else: 
                 adata0 = AnnData(features)
@@ -403,7 +404,8 @@ class CarDEC_Model(Model):
         
         adata.obsm['precluster denoised'] = preclust_denoised
         adata.obsm['precluster embedding'] = preclust_emb
-        adata.obsm['initial assignments'] = init_pred
+        if adata.shape[0] == init_pred.shape[0]:
+            adata.obsm['initial assignments'] = init_pred
     
     def embed(self, adata, batch_size):
         """ This class method can be used to compute the low-dimension embedding for HVG features. 
@@ -566,7 +568,7 @@ class CarDEC_Model(Model):
         self.optimizer.lr = lr
         
         # Begin deep clustering
-        y_pred_last = deepcopy(self.init_pred)
+        y_pred_last = np.ones((adata.shape[0],), dtype = int) * -1.
 
         min_delta = np.inf
         current_aeloss_val = np.inf
