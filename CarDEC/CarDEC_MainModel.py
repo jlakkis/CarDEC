@@ -134,9 +134,8 @@ class CarDEC_Model(Model):
             
             n_cells = features.shape[0]
             
-            if n_cells > 10**4:
-                print("subsample")
-                subset = np.random.choice(range(n_cells), 10**4, replace = False)
+            if n_cells > 10**5:
+                subset = np.random.choice(range(n_cells), 10**5, replace = False)
                 adata0 = AnnData(features[subset])
             else: 
                 adata0 = AnnData(features)
