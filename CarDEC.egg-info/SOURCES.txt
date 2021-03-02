@@ -9,11 +9,6 @@ CarDEC/CarDEC_layers.py
 CarDEC/CarDEC_optimization.py
 CarDEC/CarDEC_utils.py
 CarDEC/__init__.py
-CarDEC.egg-info/PKG-INFO
-CarDEC.egg-info/SOURCES.txt
-CarDEC.egg-info/dependency_links.txt
-CarDEC.egg-info/requires.txt
-CarDEC.egg-info/top_level.txt
 cardec.egg-info/PKG-INFO
 cardec.egg-info/SOURCES.txt
 cardec.egg-info/dependency_links.txt
