@@ -8,7 +8,7 @@ CarDEC (**C**ount **a**dapted **r**egularized **D**eep **E**mbedded **C**lusteri
 
 ## Reproducibility
 
-We described and introduced CarDEC in our [methodological paper](https://www.biorxiv.org/content/10.1101/2020.09.23.310003v1). To find code to reproduce the results we generated in that paper, please visit this separate [gitbub repository](https://github.com/jlakkis/CarDEC_Codes), which provides all code (including that for other methods) necessary to reproduce our results.
+We described and introduced CarDEC in our [methodological paper](https://www.biorxiv.org/content/10.1101/2020.09.23.310003v1). To find code to reproduce the results we generated in that paper, please visit this separate [github repository](https://github.com/jlakkis/CarDEC_Codes), which provides all code (including that for other methods) necessary to reproduce our results.
 
 ## Installation
 
