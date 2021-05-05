@@ -2,6 +2,7 @@ from .CarDEC_SAE import SAE
 from .CarDEC_utils import build_dir, find_resolution
 from .CarDEC_layers import ClusteringLayer
 from .CarDEC_optimization import grad_MainModel as grad, total_loss, MSEloss
+from .CarDEC_dataloaders import simpleloader, dataloader, tupleloader
 
 import tensorflow as tf
 from tensorflow.keras import Model, Sequential
@@ -269,7 +270,7 @@ class CarDEC_Model(Model):
         p = weight.T / np.sum(weight, axis = 1)
         return p.T
     
-    def make_generators(self, adata, val_split, batch_size, p, splitseed, newseed):
+    def make_generators(self, adata, val_split, batch_size):
         """ This class method creates training and validation data generators for the current input data and pseudo labels.
         
         
@@ -287,41 +288,19 @@ class CarDEC_Model(Model):
         - train_dataset: `tf.data.Dataset`, Dataset that returns training examples.
         - val_dataset: `tf.data.Dataset`, Dataset that returns validation examples.
         """
-        
-        n, num_features = adata.X.shape
-        
-        if self.LVG_dims is None:
-            Xobs_target_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"])
-            Xobs_norm_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"])
-            p_target_ds = tf.data.Dataset.from_tensor_slices(p)
-            
-            full_train_dataset = tf.data.Dataset.zip((Xobs_norm_ds, Xobs_target_ds, p_target_ds))
-            
-        else:
-            Xobs_target_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'])
-            Xobs_target_LVGds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'LVG'])
                 
-            Xobs_norm_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'])
-            Xobs_norm_LVGds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'LVG'])
-            p_target_ds = tf.data.Dataset.from_tensor_slices(p)
-            
-            train_dataset = tf.data.Dataset.zip((Xobs_norm_ds, Xobs_norm_LVGds))
-            full_train_dataset = tf.data.Dataset.zip((train_dataset, Xobs_target_ds, Xobs_target_LVGds, p_target_ds))
-
-        tf.random.set_seed(splitseed) #Set the seed so we get same validation split always
-        full_train_dataset = full_train_dataset.shuffle(n, reshuffle_each_iteration = False)
-        tf.random.set_seed(newseed)
-
-        train_dataset = full_train_dataset.skip(round(val_split * n))
-        val_dataset = full_train_dataset.take(round(val_split * n)) 
-
-        train_dataset = train_dataset.shuffle(n - round(val_split * n))
-        train_dataset = train_dataset.batch(batch_size)
-
-        val_dataset = val_dataset.shuffle(round(val_split * n))
-        val_dataset = val_dataset.batch(batch_size)
-
-        return train_dataset, val_dataset
+        if self.LVG_dims is None:
+            hvg_input = adata.layers["normalized input"]
+            hvg_target = adata.layers["normalized input"]
+            lvg_input = None
+            lvg_target = None
+        else:
+            hvg_input = adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG']
+            hvg_target = adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG']
+            lvg_input = adata.layers["normalized input"][:, adata.var['Variance Type'] == 'LVG']
+            lvg_target = adata.layers["normalized input"][:, adata.var['Variance Type'] == 'LVG']
+                    
+        return dataloader(hvg_input, hvg_target, lvg_input, lvg_target, val_split, batch_size, self.splitseed)
         
     def train_loop(self, train_dataset):
         """ This class method runs the training loop.
@@ -338,20 +317,12 @@ class CarDEC_Model(Model):
 
         epoch_loss_avg = tf.keras.metrics.Mean()
         
-        if self.LVG_dims is not None:
-            for inputs, target, LVG_target, batch_p in train_dataset:
-                loss_value, grads = grad(self, inputs, target, batch_p, total_loss = total_loss,
-                                         LVG_target = LVG_target, aeloss_fun = MSEloss, 
-                                         clust_weight = self.clust_weight)
-                self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
-                epoch_loss_avg(loss_value)
-        else:
-            for inputs, target, batch_p in train_dataset:
-                loss_value, grads = grad(self, [inputs, None], target, batch_p, total_loss = total_loss, 
-                                         LVG_target = None, aeloss_fun = MSEloss, 
-                                         clust_weight = self.clust_weight)
-                self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
-                epoch_loss_avg(loss_value)
+        for inputs, target, LVG_target, batch_p in train_dataset(val = False):
+            loss_value, grads = grad(self, inputs, target, batch_p, total_loss = total_loss,
+                                     LVG_target = LVG_target, aeloss_fun = MSEloss, 
+                                     clust_weight = self.clust_weight)
+            self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
+            epoch_loss_avg(loss_value)
                 
         return epoch_loss_avg.result()
                 
@@ -372,20 +343,12 @@ class CarDEC_Model(Model):
         epoch_loss_avg_val = tf.keras.metrics.Mean()
         epoch_aeloss_avg_val = tf.keras.metrics.Mean()
             
-        if self.LVG_dims is not None:
-            for inputs, target, LVG_target, batch_p in val_dataset:
-                denoised_output, cluster_output = self(*inputs)
-                loss_value, aeloss = total_loss(target, denoised_output, batch_p, cluster_output, 
-                               LVG_target = LVG_target, aeloss_fun = MSEloss, clust_weight = self.clust_weight)
-                epoch_loss_avg_val(loss_value)
-                epoch_aeloss_avg_val(aeloss)
-        else:
-            for inputs, target, batch_p in val_dataset:
-                denoised_output, cluster_output = self(*[inputs, None])
-                loss_value, aeloss = total_loss(target, denoised_output, batch_p, cluster_output, 
-                               LVG_target = None, aeloss_fun = MSEloss, clust_weight= self.clust_weight)
-                epoch_loss_avg_val(loss_value)
-                epoch_aeloss_avg_val(aeloss)
+        for inputs, target, LVG_target, batch_p in val_dataset(val = True):
+            denoised_output, cluster_output = self(*inputs)
+            loss_value, aeloss = total_loss(target, denoised_output, batch_p, cluster_output, 
+                           LVG_target = LVG_target, aeloss_fun = MSEloss, clust_weight = self.clust_weight)
+            epoch_loss_avg_val(loss_value)
+            epoch_aeloss_avg_val(aeloss)
                 
         return epoch_loss_avg_val.result(), epoch_aeloss_avg_val.result()
     
@@ -420,8 +383,7 @@ class CarDEC_Model(Model):
         - embedding: `np.ndarray`, Array of shape (n_obs, p_embedding) containing the HVG embedding for every cell in the dataset.
         """
         
-        input_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'])
-        input_ds = input_ds.batch(batch_size)
+        input_ds = simpleloader(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'], batch_size)
         
         embedding = np.zeros((adata.shape[0], self.dims[-1]), dtype = 'float32')
         start = 0
@@ -447,8 +409,7 @@ class CarDEC_Model(Model):
         - embedding: `np.ndarray`, Array of shape (n_obs, n_embedding) containing the LVG embedding for every cell in the dataset.
         """
         
-        input_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'LVG'])
-        input_ds = input_ds.batch(batch_size)
+        input_ds = simpleloader(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'LVG'], batch_size)
 
         LVG_embedded = np.zeros((adata.shape[0], self.LVG_dims[-1]), dtype = 'float32')
         start = 0
@@ -472,8 +433,7 @@ class CarDEC_Model(Model):
         """
         
         if not denoise:
-            input_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'])
-            input_ds = input_ds.batch(batch_size)
+            input_ds = simpleloader(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'], batch_size)
             adata.obsm["cluster memberships"] = np.zeros((adata.shape[0], self.n_clusters), dtype = 'float32')
             
             start = 0     
@@ -489,11 +449,7 @@ class CarDEC_Model(Model):
             if not ('embedding' in list(adata.obsm) and 'LVG embedding' in list(adata.obsm)):
                         adata.obsm['embedding'] = self.embed(adata, batch_size)
                         adata.obsm['LVG embedding'] = self.embed_LVG(adata, batch_size)
-            hvg_ds = tf.data.Dataset.from_tensor_slices(adata.obsm["embedding"])
-            lvg_ds = tf.data.Dataset.from_tensor_slices(adata.obsm["LVG embedding"])
-            
-            input_ds = tf.data.Dataset.zip((hvg_ds, lvg_ds))
-            input_ds = input_ds.batch(batch_size)
+            input_ds = tupleloader(adata.obsm["embedding"], adata.obsm["LVG embedding"], batch_size = batch_size)
             
             adata.obsm["cluster memberships"] = np.zeros((adata.shape[0], self.n_clusters), dtype = 'float32')
             adata.layers["denoised"] = np.zeros(adata.shape, dtype = 'float32')
@@ -513,9 +469,7 @@ class CarDEC_Model(Model):
         else:
             if not ('embedding' in list(adata.obsm)):
                 adata.obsm['embedding'] = self.embed(adata, batch_size)
-                    
-            input_ds = tf.data.Dataset.from_tensor_slices(adata.obsm["embedding"])
-            input_ds = input_ds.batch(batch_size)
+            input_ds = simpleloader(adata.obsm["embedding"], batch_size)
             
             adata.obsm["cluster memberships"] = np.zeros((adata.shape[0], self.n_clusters), dtype = 'float32')
             adata.layers["denoised"] = np.zeros(adata.shape, dtype = 'float32')
@@ -575,21 +529,22 @@ class CarDEC_Model(Model):
         delta_patience_LR = 0
         delta_stop = False
         
+        dataset = self.make_generators(adata, val_split = 0.1, batch_size = batch_size)
+        
         self.make_outputs(adata, batch_size, denoise = printperiter is not None)
         
         for ite in range(int(maxiter)):
             
             p = self.target_distribution(adata.obsm['cluster memberships'])
             
-            train_dataset, val_dataset = self.make_generators(adata, val_split = 0.1, batch_size = batch_size, 
-                                                         p = p, splitseed = self.splitseed, newseed = seedlist[ite])
+            dataset.update_p(p)
 
             best_loss = np.inf
             iter_start = time()
                         
             for epoch in range(epochs_fit):
-                current_loss_train = self.train_loop(train_dataset)
-                current_loss_val, current_aeloss_val = self.validation_loop(val_dataset)
+                current_loss_train = self.train_loop(dataset)
+                current_loss_val, current_aeloss_val = self.validation_loop(dataset)
             
             self.make_outputs(adata, batch_size, denoise = printperiter is not None)
             

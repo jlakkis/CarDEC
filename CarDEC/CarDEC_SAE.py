@@ -1,4 +1,5 @@
 from .CarDEC_optimization import grad_reconstruction as grad, MSEloss
+from .CarDEC_dataloaders import simpleloader, aeloader
 
 import tensorflow as tf
 from tensorflow.keras import Model, Sequential
@@ -162,8 +163,7 @@ class SAE(Model):
         - output: `np.ndarray`, Numpy array of denoised expression of shape (n_obs, n_vars)
         """
         
-        input_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'])
-        input_ds = input_ds.batch(batch_size)
+        input_ds = simpleloader(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'], batch_size)
         
         output = np.zeros((adata.shape[0], self.dims[0]), dtype = 'float32')
         start = 0
@@ -189,12 +189,11 @@ class SAE(Model):
         - embedding: `np.ndarray`, Array of shape (n_obs, n_vars) containing the cell HVG embeddings.
         """
         
-        input_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'])
-        input_ds = input_ds.batch(batch_size)
+        input_ds = simpleloader(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'], batch_size)
         
         embedding = np.zeros((adata.shape[0], self.dims[-1]), dtype = 'float32')
+        
         start = 0
-
         for x in input_ds:
             end = start + x.shape[0]
             embedding[start:end] = self.encoder(x).numpy()
@@ -219,26 +218,7 @@ class SAE(Model):
         - val_dataset: `tf.data.Dataset`, Dataset that returns validation examples.
         """
         
-        n, num_features = adata.X.shape
-                
-        Xobs_target_ds = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'])
-        train_dataset = tf.data.Dataset.from_tensor_slices(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'])
-        
-        full_train_dataset = tf.data.Dataset.zip((train_dataset, Xobs_target_ds))
-        
-        tf.random.set_seed(splitseed) #Set the seed so we get same validation split always
-        full_train_dataset = full_train_dataset.shuffle(n, reshuffle_each_iteration = False)
-                
-        train_dataset = full_train_dataset.skip(round(val_split * n))
-        val_dataset = full_train_dataset.take(round(val_split * n)) 
-        
-        train_dataset = train_dataset.shuffle(n - round(val_split * n))
-        train_dataset = train_dataset.batch(batch_size)
-        
-        val_dataset = val_dataset.shuffle(round(val_split * n))
-        val_dataset = val_dataset.batch(batch_size)
-        
-        return train_dataset, val_dataset
+        return aeloader(adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'], adata.layers["normalized input"][:, adata.var['Variance Type'] == 'HVG'], val_frac = val_split, batch_size = batch_size, splitseed = splitseed)
     
     def train(self, adata, num_epochs = 2000, batch_size = 64, val_split = 0.1, lr = 1e-03, decay_factor = 1/3,
               patience_LR = 3, patience_ES = 9, save_fullmodel = True):
@@ -260,8 +240,7 @@ class SAE(Model):
         
         tf.keras.backend.clear_session()
         
-        train_dataset, val_dataset = self.makegenerators(adata, val_split = 0.1, 
-                                                         batch_size = batch_size, splitseed = self.splitseed)
+        dataset = self.makegenerators(adata, val_split = 0.1, batch_size = batch_size, splitseed = self.splitseed)
         
         counter_LR = 0
         counter_ES = 0
@@ -277,13 +256,13 @@ class SAE(Model):
             epoch_loss_avg_val = tf.keras.metrics.Mean()
             
             # Training loop - using batches of batch_size
-            for x, target in train_dataset:
+            for x, target in dataset(val = False):
                 loss_value, grads = grad(self, x, target, MSEloss)
                 self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
                 epoch_loss_avg(loss_value)  # Add current batch loss
             
             # Validation Loop
-            for x, target in val_dataset:
+            for x, target in dataset(val = True):
                 output = self(x)
                 loss_value = MSEloss(target, output)
                 epoch_loss_avg_val(loss_value)

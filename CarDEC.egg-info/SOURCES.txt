@@ -5,6 +5,7 @@ CarDEC/CarDEC_API.py
 CarDEC/CarDEC_MainModel.py
 CarDEC/CarDEC_SAE.py
 CarDEC/CarDEC_count_decoder.py
+CarDEC/CarDEC_dataloaders.py
 CarDEC/CarDEC_layers.py
 CarDEC/CarDEC_optimization.py
 CarDEC/CarDEC_utils.py

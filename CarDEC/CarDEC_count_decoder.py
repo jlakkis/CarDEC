@@ -1,5 +1,6 @@
 from .CarDEC_optimization import grad_reconstruction as grad, NBloss
 from .CarDEC_utils import build_dir
+from .CarDEC_dataloaders import countloader, tupleloader
 
 import tensorflow as tf
 from tensorflow.keras import Model, Sequential
@@ -147,10 +148,7 @@ class count_model(Model):
         dispersions) added as layers.
         """
         
-        input_ds_embed = tf.data.Dataset.from_tensor_slices(adata.obsm[self.embed_name])
-        input_ds_sf = tf.data.Dataset.from_tensor_slices(adata.obs['size factors'])
-        input_ds = tf.data.Dataset.zip((input_ds_embed, input_ds_sf))
-        input_ds = input_ds.batch(batch_size)
+        input_ds = tupleloader(adata.obsm[self.embed_name], adata.obs['size factors'], batch_size = batch_size)
         
         if "denoised counts" not in list(adata.layers):
             adata.layers["denoised counts"] = np.zeros(adata.shape, dtype = 'float32')
@@ -195,28 +193,8 @@ class count_model(Model):
         - val_dataset: `tf.data.Dataset`, Dataset that returns validation examples.
         """
         
-        n, num_features = adata.X.shape
-        
-        Xobs_target_ds = tf.data.Dataset.from_tensor_slices(adata.X[:, adata.var['Variance Type'] == self.mode])
-        Xobs_embed = tf.data.Dataset.from_tensor_slices(adata.obsm[self.embed_name])
-        size_factors_ds = tf.data.Dataset.from_tensor_slices(adata.obs['size factors'])
-        
-        train_dataset = tf.data.Dataset.zip((Xobs_embed, size_factors_ds))
-        full_train_dataset = tf.data.Dataset.zip((train_dataset, Xobs_target_ds))
-        
-        tf.random.set_seed(splitseed) #Set the seed so we get same validation split always
-        full_train_dataset = full_train_dataset.shuffle(n, reshuffle_each_iteration = False)
-                
-        train_dataset = full_train_dataset.skip(round(val_split * n))
-        val_dataset = full_train_dataset.take(round(val_split * n)) 
-        
-        train_dataset = train_dataset.shuffle(n - round(val_split * n))
-        train_dataset = train_dataset.batch(batch_size)
-        
-        val_dataset = val_dataset.shuffle(round(val_split * n))
-        val_dataset = val_dataset.batch(batch_size)
-        
-        return train_dataset, val_dataset
+        return countloader(adata.obsm[self.embed_name], adata.X[:, adata.var['Variance Type'] == self.mode], adata.obs['size factors'], 
+                           val_split, batch_size, splitseed)
     
     def train(self, adata, num_epochs = 2000, batch_size = 64, val_split = 0.1, lr = 1e-03, decay_factor = 1/3,
               patience_LR = 3, patience_ES = 9):
@@ -244,8 +222,7 @@ class count_model(Model):
                 
         loss = NBloss
         
-        train_dataset, val_dataset = self.makegenerators(adata, val_split = 0.1, 
-                                                         batch_size = batch_size, splitseed = self.splitseed)
+        dataset = self.makegenerators(adata, val_split = 0.1, batch_size = batch_size, splitseed = self.splitseed)
         
         counter_LR = 0
         counter_ES = 0
@@ -262,13 +239,13 @@ class count_model(Model):
             epoch_loss_avg_val = tf.keras.metrics.Mean()
             
             # Training loop - using batches of batch_size
-            for x, target in train_dataset:
+            for x, target in dataset(val = False):
                 loss_value, grads = grad(self, x, target, loss)
                 self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
                 epoch_loss_avg(loss_value)  # Add current batch loss
             
             # Validation Loop
-            for x, target in val_dataset:
+            for x, target in dataset(val = True):
                 output = self(*x)
                 loss_value = loss(target, output)
                 epoch_loss_avg_val(loss_value)
